@@ -3,7 +3,7 @@ import os
 import random
 from tqdm import tqdm
 from playwright.async_api import async_playwright
-from PyPDF2 import PdfMerger
+from PyPDF2 import PdfWriter, PdfReader # Switched to PdfWriter for better bookmarking control
 
 async def create_reference_book(base_url, output_name):
     CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -15,7 +15,6 @@ async def create_reference_book(base_url, output_name):
     async with async_playwright() as p:
         print(f"--- Launching System Chrome (New Headless Mode) ---")
         
-        # We explicitly pass '--headless=new' to avoid the 'Old Headless' error
         browser = await p.chromium.launch(
             headless=True,
             executable_path=CHROME_PATH,
@@ -39,13 +38,17 @@ async def create_reference_book(base_url, output_name):
             "#mw-content-text a", 
             "nodes => nodes.map(n => n.href).filter(href => href.includes('/w/cpp/'))"
         )
+        # Unique links, removing fragments
         unique_links = list(dict.fromkeys([l.split('#')[0] for l in links]))[:20] 
         
-        pdf_files = []
+        pdf_data = [] # Store (temp_filename, title) pairs
         pbar = tqdm(total=len(unique_links), desc="Converting Pages", unit="pg")
 
         for i, url in enumerate(unique_links):
             temp_pdf = f"part_{i}.pdf"
+            # Extract a clean title from the URL for the bookmark
+            title = url.split('/')[-1].replace('_', ' ').capitalize()
+            
             if i > 0:
                 await asyncio.sleep(random.uniform(1.5, 3.0))
 
@@ -56,11 +59,12 @@ async def create_reference_book(base_url, output_name):
                 await page.add_style_tag(content="""
                     #cpp-navigation, #cpp-p-search, #footer, .vector-menu { display: none !important; }
                     #content { margin-left: 0 !important; padding: 20px !important; border: none !important; }
-                    body { background: white !important; }
+                    body { background: white !important; font-family: 'Helvetica', 'Arial', sans-serif; }
+                    code { background-color: #f8f9fa; border: 1px solid #eaecef; padding: 2px 4px; }
                 """)
 
                 await page.pdf(path=temp_pdf, format="A4", print_background=True)
-                pdf_files.append(temp_pdf)
+                pdf_data.append((temp_pdf, title))
             except Exception as e:
                 pbar.write(f"Error on {url}: {e}")
             
@@ -68,18 +72,35 @@ async def create_reference_book(base_url, output_name):
 
         pbar.close()
 
-        if pdf_files:
-            print("\nMerging files...")
-            merger = PdfMerger()
-            for pdf in pdf_files:
-                merger.append(pdf)
-            merger.write(output_name)
-            merger.close()
-            for pdf in pdf_files:
-                os.remove(pdf)
-            print(f"Created: {output_name}")
+        # --- ADVANCED MERGING WITH BOOKMARKS ---
+        if pdf_data:
+            print("\nMerging and generating bookmarks...")
+            writer = PdfWriter()
+            current_page_index = 0
+
+            for pdf_file, title in pdf_data:
+                if os.path.exists(pdf_file):
+                    reader = PdfReader(pdf_file)
+                    num_pages = len(reader.pages)
+                    
+                    # Append the PDF
+                    writer.append(reader)
+                    
+                    # Add a bookmark pointing to the start of this section
+                    writer.add_outline_item(title, current_page_index)
+                    
+                    current_page_index += num_pages
+
+            with open(output_name, "wb") as f:
+                writer.write(f)
+
+            # Cleanup
+            for pdf_file, _ in pdf_data:
+                if os.path.exists(pdf_file):
+                    os.remove(pdf_file)
+            print(f"Success! Manual created: {output_name}")
 
         await browser.close()
 
 if __name__ == "__main__":
-    asyncio.run(create_reference_book("https://en.cppreference.com/w/cpp/container", "CPP_Manual.pdf"))
+    asyncio.run(create_reference_book("https://en.cppreference.com/w/cpp/container", "CPP_Containers_Bookmarked.pdf"))

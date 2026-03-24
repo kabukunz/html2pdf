@@ -1,0 +1,22 @@
+
+# Ignore any data type created by the user
+*.txt
+*.pdf
+
+# --- Python Environment ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+ENV/
+
+# --- macOS Specific ---
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Local Testing ---
+# Ignore any temp directories created during manual tests
+temp_test_*/
+*.log
