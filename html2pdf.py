@@ -148,4 +148,4 @@ async def create_linked_manual(base_url, output_name):
         await browser.close()
 
 if __name__ == "__main__":
-    asyncio.run(create_linked_manual("https://en.cppreference.com/w/cpp/container", "CPP_Manual_With_Sidebar.pdf"))
+    asyncio.run(create_linked_manual("https://en.cppreference.com/w/cpp/language/objects.html", "CPP_Manual_With_Sidebar.pdf"))
